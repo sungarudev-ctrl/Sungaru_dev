@@ -27,7 +27,8 @@
 | Admin access | Supabase email + password auth + Row-Level Security; only admin emails can write | Password rather than magic link, because the free built-in email sender is heavily rate-limited. Public users can only read published apps |
 | Images | Resized and converted to WebP **in the browser before upload**, then served from Supabase Storage at several sizes (`srcset`) with long cache headers | Keeps usage inside the free 1 GB storage / 5 GB egress |
 | Hosting | **Cloudflare Pages (Free)** with SPA fallback (`_redirects`: `/* /index.html 200`) | Unlimited bandwidth, commercial use allowed, preview deploys per branch |
-| Domain | Free `*.pages.dev` subdomain to start; custom domain optional later (~$10/yr, the only cost) | |
+| Domain | **Custom domain** registered through **Cloudflare Registrar** (sold at cost, no markup, about $10–15/yr depending on the extension) with DNS on Cloudflare (free) | The only running cost of the project. Free Cloudflare Email Routing forwards `support@<domain>` to your Gmail |
+| Feedback | **Google Forms** (free), with responses collected in a Google Sheet | Nothing stored in Supabase; Google handles spam, storage and notifications |
 
 > **Why Supabase rather than a static JSON file?** The "Add App" button has to save data somewhere that the live site reads from. A static site would need a rebuild for every new app. Supabase lets a new app appear immediately after you click Add App, and it also handles image uploads and sign-in.
 > **Why not Firebase?** Since February 2026, Cloud Storage for Firebase requires the Blaze (pay-as-you-go) plan with a billing account attached, even when usage stays in the free allowance. We need image uploads, so Firebase would mean attaching a card. Supabase's free plan includes storage with no card required.
@@ -57,12 +58,12 @@
 | `/apps/:slug` | App detail | Themed with that app's colors |
 | `/apps/:slug/faq` | App FAQs | Accordion, searchable |
 | `/apps/:slug/help` | App help | Rich text / guides, contact info |
-| `/apps/:slug/feedback` | App feedback | Form (or redirect to external feedback URL if set) |
+| `/apps/:slug/feedback` | App feedback | Embedded Google Form with the app name pre-filled, plus an "Open in Google Forms" button as a fallback |
 | `/support` | General support | Contact form, links to each app's help |
 | `/request` | User requests | Feature request / new app idea form |
 | `/about` | About Sungaru Dev | Mission, contact |
 | `/admin/login` | Admin sign-in | |
-| `/admin` | Dashboard | List of apps (draft/published), **Create App** button, inbox of feedback/requests |
+| `/admin` | Dashboard | List of apps (draft/published), **Create App** button, inbox of user requests, link to the feedback Google Sheet |
 | `/admin/apps/new` | App builder | Form + live preview, **Add App** button |
 | `/admin/apps/:slug/edit` | Edit app | Same builder, pre-filled |
 | `*` | 404 | Friendly not-found page |
@@ -99,7 +100,7 @@ App {
     web?:       url
   }
   support: {
-    feedbackUrl?: url                // external form; otherwise use built-in feedback form
+    feedbackFormUrl?: url            // per-app Google Form; if empty, the site-wide form is used with the app name pre-filled
     faqs: { question: string; answer: string }[]
     help: string                     // markdown
     contactEmail?: email
@@ -156,13 +157,12 @@ CardStyle {
 The theme is converted into CSS variables (`--app-bg`, `--app-card-bg`, `--app-accent`, …) on the app page wrapper, so the components themselves need no per-app code. If you only set light-mode colors, dark-mode values are generated automatically; you can override them.
 
 ### 4.3 Other tables
-- `feedback` (`id, app_id, name?, email?, rating?, message, created_at, status`)
 - `requests` (`id, type: 'feature' | 'new-app' | 'bug' | 'other', app_id?, name?, email, message, created_at, status`)
-- `admins` (`email`), used by RLS policies
+- `admins` (`user_id`, `email`), used by RLS policies. Starts with one row (you). **Adding an admin later** means creating their user in the Supabase dashboard and adding a row here, with no code change. Public sign-ups are disabled, so nobody else can create an account.
 
 **Row-Level Security**
 - `apps`: public `select` where `status = 'published'`; admins have full access.
-- `feedback`, `requests`: public `insert` only (rate-limited, with a honeypot field against spam); admins can `select`/`update`.
+- `requests`: public `insert` only (rate-limited, with a honeypot field against spam); admins can `select`/`update`.
 - Storage `app-media`: public read; admins write.
 
 ---
@@ -177,7 +177,7 @@ The theme is converted into CSS variables (`--app-bg`, `--app-card-bg`, `--app-a
 2. **Media**: icon upload; drag-and-drop screenshot upload with reordering, captions, and alt text (required, for accessibility).
 3. **Key features**: add/remove/reorder features; each has a title, description, icon picker, optional image, and optional card color override.
 4. **Downloads**: toggle each platform on or off and enter its URL. Only enabled platforms appear on the page.
-5. **Support**: feedback URL (or use the built-in form), FAQ list editor, help content, contact email.
+5. **Support**: optional per-app Google Form link (defaults to the site-wide feedback form), FAQ list editor, help content, contact email.
 6. **Theme**:
    - Light/dark tabs
    - Page background: solid / gradient (two color pickers + angle) / image (upload + overlay)
@@ -233,7 +233,9 @@ The theme is converted into CSS variables (`--app-bg`, `--app-card-bg`, `--app-a
 ### Phase 2: Backend
 - [ ] Supabase project, SQL migrations, RLS policies, storage bucket
 - [ ] Supabase adapter implementing the same API interface
-- [ ] Feedback and request forms write to the DB (honeypot field + basic rate limit)
+- [ ] Request form writes to the DB (honeypot field + basic rate limit)
+- [ ] Create the site-wide **Google Form** (fields: App, Rating, Feedback, Email (optional)) linked to a Google Sheet, with email notifications on new responses; store its URL and the App field's pre-fill `entry.<id>` in `.env` (`VITE_FEEDBACK_FORM_URL`, `VITE_FEEDBACK_APP_FIELD`)
+- [ ] `FeedbackEmbed` component: iframe embed (`?embedded=true&entry.<id>=<App name>`), lazy-loaded, with an "Open in Google Forms" fallback link
 - [ ] Admin auth (email + password) + route guard
 - [ ] Keep-alive GitHub Actions workflow so the free Supabase project never pauses
 
@@ -245,14 +247,16 @@ The theme is converted into CSS variables (`--app-bg`, `--app-card-bg`, `--app-a
 - [ ] Live preview using the real app page components
 - [ ] **Add App** (publish), **Save Draft**, edit, unpublish, delete (with confirmation)
 - [ ] Draft autosave + warning before leaving with unsaved changes
-- [ ] Admin inbox for feedback and requests
+- [ ] Admin inbox for user requests + link to the feedback Google Sheet
 
 ### Phase 4: Polish and launch
 - [ ] Page transitions + reduced-motion support
 - [ ] Lighthouse ≥ 95 on Performance, Accessibility, Best Practices, and SEO
 - [ ] Playwright e2e: browse → open app → download link; admin create → add → app appears in catalogue
 - [ ] Favicon, OG images, `robots.txt`, sitemap generation
-- [ ] Deploy to Cloudflare Pages (`*.pages.dev`), with Cloudflare Web Analytics (free, privacy-friendly); custom domain optional
+- [ ] Register the custom domain on Cloudflare Registrar, attach it to Cloudflare Pages (HTTPS automatic and free), redirect `www` → apex
+- [ ] Cloudflare Email Routing: `support@` and `hello@` forward to the owner's Gmail
+- [ ] Cloudflare Web Analytics (free, privacy-friendly)
 
 ### Later (v2 ideas)
 - Changelog / release notes per app
@@ -280,7 +284,8 @@ The theme is converted into CSS variables (`--app-bg`, `--app-card-bg`, `--app-a
 
 1. ~~**Hosting / backend**~~: decided. Cloudflare Pages + Supabase Free, $0/month (see §2.1).
 2. ~~**Logo**~~: decided. A simple SVG monogram + wordmark is built in Phase 0.
-3. **Domain**: start on the free `*.pages.dev` address, or buy a custom domain later?
-4. **Admin users**: just you, or multiple team members?
-5. **Feedback**: should it be stored on the site (built-in form), sent to an external form such as Google Forms or Tally, or should each app choose?
-6. **Launch apps**: which apps (and their details and screenshots) go live first?
+3. ~~**Domain**~~: decided. Custom domain via Cloudflare Registrar. **Still to choose: the name** (e.g. `sungaru.dev`, `sungarudev.com`).
+4. ~~**Admin users**~~: decided. One admin (the owner) for now; more can be added later without code changes.
+5. ~~**Feedback**~~: decided. Google Forms (free), with the app name pre-filled.
+6. **User requests**: keep the built-in request form (stored in Supabase), or move it to a Google Form as well?
+7. **Launch apps**: which apps (and their details and screenshots) go live first?

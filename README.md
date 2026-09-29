@@ -18,7 +18,7 @@ This repository contains the **Sungaru Dev website**: a single-page application 
   - A short "what it's about" description
   - **Key features**, each shown as its own styled card
   - **Download links**, shown only when set: Google Play, App Store, Desktop (Windows / macOS / Linux), and Web App
-  - Links to **Feedback**, **FAQs**, and **Help**
+  - Links to **Feedback** (an embedded Google Form with the app name pre-filled), **FAQs**, and **Help**
 - **Per-app theming**: every app page has its own background, card colors, and accent color, with separate values for light and dark mode.
 - **Support and user requests**: a general support page plus a form for feature and app requests.
 - **Dark / light mode switcher**: follows the system setting by default, and the visitor's choice is remembered.
@@ -76,6 +76,8 @@ The whole stack runs on free tiers ($0/month). See [Zero-cost budget](docs/PLAN.
 | Animation | **Framer Motion** | Subtle page and card transitions |
 | Icons | **Lucide** | Clean, consistent icon set |
 | Testing | **Vitest + Testing Library + Playwright** | Unit, component, and end-to-end tests |
+| Feedback | **Google Forms** | Free; responses go to a Google Sheet |
+| Domain | **Cloudflare Registrar** + free DNS / Email Routing | At-cost custom domain, the only running cost |
 | Hosting | **Cloudflare Pages (Free)** | Unlimited bandwidth, commercial use allowed, SPA rewrites, preview deploys |
 
 ---

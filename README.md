@@ -60,7 +60,7 @@ The palette is calm and modern: a deep, slightly desaturated teal with neutral g
 
 ## Tech stack
 
-The whole stack runs on free tiers ($0/month). See [Zero-cost budget](docs/PLAN.md#21-zero-cost-budget).
+The whole stack runs on free tiers ($0/month); the only cost is the custom domain (about $10–15/year). See [Zero-cost budget](docs/PLAN.md#21-zero-cost-budget).
 
 
 | Concern | Choice | Why |

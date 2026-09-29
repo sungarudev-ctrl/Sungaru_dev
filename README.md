@@ -54,9 +54,14 @@ The palette is calm and modern: a deep, slightly desaturated teal with neutral g
 - Body/UI: **Inter** (400–600), with a fluid type scale using `clamp()`
 - Code/versions: **JetBrains Mono**
 
+**Logo:** v1 is a simple SVG "S" monogram plus a "Sungaru Dev" wordmark in the brand teal. The favicon and app icons are generated from the same file, and it can be swapped for a professionally designed logo later.
+
 ---
 
 ## Tech stack
+
+The whole stack runs on free tiers ($0/month). See [Zero-cost budget](docs/PLAN.md#21-zero-cost-budget).
+
 
 | Concern | Choice | Why |
 |---|---|---|
@@ -67,11 +72,11 @@ The palette is calm and modern: a deep, slightly desaturated teal with neutral g
 | UI primitives | **Radix UI** (via shadcn/ui) | Accessible dialogs, tabs, accordions, and switches |
 | Forms | **React Hook Form + Zod** | One schema shared by the form, validation, and the database |
 | Data fetching | **TanStack Query** | Caching, loading states, and data updates after admin edits |
-| Backend | **Supabase** (Postgres, Storage, Auth) | Stores apps, uploaded images, and admin sign-in, with no custom server |
+| Backend | **Supabase Free plan** (Postgres, Storage, Auth) | Stores apps, uploaded images, and admin sign-in at $0 with no card required |
 | Animation | **Framer Motion** | Subtle page and card transitions |
 | Icons | **Lucide** | Clean, consistent icon set |
 | Testing | **Vitest + Testing Library + Playwright** | Unit, component, and end-to-end tests |
-| Hosting | **Vercel** or **Netlify** | SPA rewrites, preview deploys |
+| Hosting | **Cloudflare Pages (Free)** | Unlimited bandwidth, commercial use allowed, SPA rewrites, preview deploys |
 
 ---
 

@@ -22,14 +22,29 @@
 | SPA framework | React 19 + TypeScript + Vite | |
 | Router | React Router data router (`createBrowserRouter`) | Loaders prefetch app data, `lazy()` splits routes, `<ScrollRestoration/>`, `errorElement` per route |
 | Styling | Tailwind v4 + CSS custom properties | Site tokens on `:root`/`.dark`, per-app tokens scoped to the app page wrapper |
-| Persistence | Supabase: `apps` table (JSONB columns for flexible content), Storage bucket for images, Auth for the admin | A local JSON "mock" adapter behind the same interface allows offline development |
+| Persistence | Supabase **Free plan**: `apps` table (JSONB columns for flexible content), Storage bucket for images, Auth for the admin | A local JSON "mock" adapter behind the same interface allows offline development |
 | Validation | One Zod schema used by the form, the API layer, and the TypeScript types | |
-| Admin access | Supabase email/magic-link auth + Row-Level Security; only admin emails can write | Public users can only read published apps |
-| Images | Uploaded to Storage and served as WebP at several sizes (`srcset`) | Size limits enforced in the uploader |
-| Hosting | Vercel/Netlify with SPA fallback rewrite (`/* → /index.html`) | |
+| Admin access | Supabase email + password auth + Row-Level Security; only admin emails can write | Password rather than magic link, because the free built-in email sender is heavily rate-limited. Public users can only read published apps |
+| Images | Resized and converted to WebP **in the browser before upload**, then served from Supabase Storage at several sizes (`srcset`) with long cache headers | Keeps usage inside the free 1 GB storage / 5 GB egress |
+| Hosting | **Cloudflare Pages (Free)** with SPA fallback (`_redirects`: `/* /index.html 200`) | Unlimited bandwidth, commercial use allowed, preview deploys per branch |
+| Domain | Free `*.pages.dev` subdomain to start; custom domain optional later (~$10/yr, the only cost) | |
 
 > **Why Supabase rather than a static JSON file?** The "Add App" button has to save data somewhere that the live site reads from. A static site would need a rebuild for every new app. Supabase lets a new app appear immediately after you click Add App, and it also handles image uploads and sign-in.
-> **Alternative:** Firebase (Firestore + Storage + Auth) fits the same design. Only `lib/api/` would change.
+> **Why not Firebase?** Since February 2026, Cloud Storage for Firebase requires the Blaze (pay-as-you-go) plan with a billing account attached, even when usage stays in the free allowance. We need image uploads, so Firebase would mean attaching a card. Supabase's free plan includes storage with no card required.
+
+### 2.1 Zero-cost budget
+
+| Service | Plan | Free allowance | Our expected use |
+|---|---|---|---|
+| Cloudflare Pages | Free | Unlimited sites and bandwidth, 500 builds/month | A few builds per week |
+| Supabase | Free | 500 MB database, 1 GB file storage, 5 GB egress/month, 50k MAU, 2 projects | Tiny database; about 150 KB per WebP screenshot fits roughly 6,000 images |
+| GitHub | Free | Repo, Actions (2,000 min/month on private repos) | CI + keep-alive ping |
+
+**Free-tier risks and mitigations**
+- **Supabase pauses projects after 7 days of inactivity.** A scheduled GitHub Actions workflow (`.github/workflows/keep-alive.yml`) runs a tiny read query every 3 days, so the project never pauses.
+- **5 GB/month egress.** Screenshots are compressed in the browser before upload, served in responsive sizes, and cached by browsers for a long time. The catalogue loads only app icons, and screenshots load lazily.
+- **Built-in auth emails are rate-limited.** The admin signs in with email + password, so no emails are needed for normal use.
+- **Upgrading later is optional.** If traffic outgrows the free tier, move to Supabase Pro. The code doesn't change.
 
 ---
 
@@ -201,6 +216,7 @@ The theme is converted into CSS variables (`--app-bg`, `--app-card-bg`, `--app-a
 - [ ] shadcn/ui base components (Button, Card, Dialog, Tabs, Accordion, Input, Textarea, Switch, Select)
 - [ ] ThemeProvider + ThemeToggle (no flash of the wrong theme)
 - [ ] Router skeleton with layouts, lazy routes, 404, scroll restoration
+- [ ] **Logo v1**: a simple SVG monogram ("S" mark) + "Sungaru Dev" wordmark in Plus Jakarta Sans, using the brand teal; light/dark variants, favicon, and app-touch icons generated from the same SVG (free, no designer needed; replaceable later)
 - [ ] CI (GitHub Actions): lint, typecheck, test, build
 
 ### Phase 1: Public site with mock data
@@ -218,7 +234,8 @@ The theme is converted into CSS variables (`--app-bg`, `--app-card-bg`, `--app-a
 - [ ] Supabase project, SQL migrations, RLS policies, storage bucket
 - [ ] Supabase adapter implementing the same API interface
 - [ ] Feedback and request forms write to the DB (honeypot field + basic rate limit)
-- [ ] Admin auth (magic link) + route guard
+- [ ] Admin auth (email + password) + route guard
+- [ ] Keep-alive GitHub Actions workflow so the free Supabase project never pauses
 
 ### Phase 3: App builder
 - [ ] Admin dashboard: app list, status, reordering, **Create App** button
@@ -235,7 +252,7 @@ The theme is converted into CSS variables (`--app-bg`, `--app-card-bg`, `--app-a
 - [ ] Lighthouse ≥ 95 on Performance, Accessibility, Best Practices, and SEO
 - [ ] Playwright e2e: browse → open app → download link; admin create → add → app appears in catalogue
 - [ ] Favicon, OG images, `robots.txt`, sitemap generation
-- [ ] Deploy to Vercel/Netlify, custom domain, analytics (privacy-friendly, e.g. Plausible)
+- [ ] Deploy to Cloudflare Pages (`*.pages.dev`), with Cloudflare Web Analytics (free, privacy-friendly); custom domain optional
 
 ### Later (v2 ideas)
 - Changelog / release notes per app
@@ -261,9 +278,9 @@ The theme is converted into CSS variables (`--app-bg`, `--app-card-bg`, `--app-a
 
 ## 9. Open questions for the owner
 
-1. **Hosting / domain**: do you already have a domain (e.g. `sungaru.dev`)?
-2. **Backend**: is Supabase OK, or do you prefer Firebase or another provider?
-3. **Admin users**: just you, or multiple team members?
-4. **Feedback**: should it be stored on the site (built-in form), sent to an external form such as Google Forms or Tally, or should each app choose?
-5. **Logo**: do you have a logo/wordmark, or should we design a simple one?
+1. ~~**Hosting / backend**~~: decided. Cloudflare Pages + Supabase Free, $0/month (see §2.1).
+2. ~~**Logo**~~: decided. A simple SVG monogram + wordmark is built in Phase 0.
+3. **Domain**: start on the free `*.pages.dev` address, or buy a custom domain later?
+4. **Admin users**: just you, or multiple team members?
+5. **Feedback**: should it be stored on the site (built-in form), sent to an external form such as Google Forms or Tally, or should each app choose?
 6. **Launch apps**: which apps (and their details and screenshots) go live first?

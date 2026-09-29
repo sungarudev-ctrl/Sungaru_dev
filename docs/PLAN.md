@@ -79,91 +79,27 @@
 
 ## 4. Data model
 
-### 4.1 `App` (Zod schema = TypeScript type = DB row)
+> **Full schema: [`docs/SCHEMA.md`](SCHEMA.md).** It covers the SQL tables, functions, security policies, storage bucket, the complete Zod validation schema, an example app record, and the data access API.
 
-```ts
-App {
-  id: uuid
-  slug: string                       // auto-generated from name, editable, unique
-  status: 'draft' | 'published'
-  order: number                      // position in catalogue
-  name: string
-  tagline: string                    // ≤ 80 chars, shown on the card
-  description: string                // markdown, "what it's about"
-  icon: ImageRef
-  screenshots: ImageRef[]            // curated, reorderable, with captions
-  features: Feature[]
-  platforms: {
-    playStore?: url
-    appStore?:  url
-    desktop?:   { windows?: url; macos?: url; linux?: url }
-    web?:       url
-  }
-  support: {
-    feedbackFormUrl?: url            // per-app Google Form; if empty, the site-wide form is used with the app name pre-filled
-    faqs: { question: string; answer: string }[]
-    help: string                     // markdown
-    contactEmail?: email
-  }
-  theme: AppTheme
-  version?: string
-  updatedAt: timestamp
-  createdAt: timestamp
-}
+**Summary**
 
-Feature {
-  id: string
-  title: string
-  description: string
-  icon?: string                      // Lucide icon name or uploaded image
-  image?: ImageRef
-  cardStyle?: Partial<CardStyle>     // per-feature override
-}
+| Table | What it stores | Who can read | Who can write |
+|---|---|---|---|
+| `apps` | One row per app: slug, status (draft/published), order, name, tagline, description, version, plus JSONB for icon, screenshots, features, platforms, support, and theme | Everyone (published only); admins (all) | Admins |
+| `requests` | User requests: type (feature / new app / bug / other), optional app, name, email, message, status | Admins | Anyone can submit (rate-limited: 3 per email per hour) |
+| `admins` | Which signed-in users are admins (starts with just you) | Admins | Supabase dashboard only |
+| Storage `app-media` | Icons, screenshots, feature images, backgrounds (WebP, ≤ 2 MB) | Everyone | Admins |
 
-ImageRef { url: string; alt: string; width: number; height: number }
-```
+**What an app contains** (validated by Zod; drafts can be incomplete, published apps can't):
 
-### 4.2 `AppTheme` (the customization options)
-
-```ts
-AppTheme {
-  light: ThemeVariant
-  dark:  ThemeVariant
-  hero:  { layout: 'centered' | 'split' | 'banner'; showScreenshot: boolean }
-  card:  CardStyle
-}
-
-ThemeVariant {
-  pageBackground: Background
-  cardBackground: Background
-  accent: color                      // buttons, links, highlights on this page
-  text: color
-  mutedText: color
-}
-
-Background =
-  | { type: 'solid';    color: color }
-  | { type: 'gradient'; from: color; to: color; angle: number }
-  | { type: 'image';    image: ImageRef; overlay: color; overlayOpacity: number }
-
-CardStyle {
-  radius: 'sm' | 'md' | 'lg' | 'xl'
-  border: 'none' | 'subtle' | 'accent'
-  shadow: 'none' | 'soft' | 'lifted'
-  glass: boolean                     // translucent + backdrop-blur
-}
-```
+- **Basics**: name (≤ 60), slug, tagline (≤ 80), markdown description, version, status, order
+- **Media**: icon, 1–12 screenshots, each with alt text, an optional caption, and several WebP sizes
+- **Features**: 1–12 cards, each with a title, description, icon, optional image, and optional card color override
+- **Platforms**: Play Store, App Store, Desktop (Windows / macOS / Linux), Web. All optional, but at least one is required to publish
+- **Support**: optional per-app Google Form link, FAQs, markdown help, contact email
+- **Theme**: light and (optional) dark variants for page background and card background (solid / gradient / image), plus accent, text, and muted text colors, hero layout, and card style (radius, border, shadow, glass)
 
 The theme is converted into CSS variables (`--app-bg`, `--app-card-bg`, `--app-accent`, …) on the app page wrapper, so the components themselves need no per-app code. If you only set light-mode colors, dark-mode values are generated automatically; you can override them.
-
-### 4.3 Other tables
-- `requests` (`id, type: 'feature' | 'new-app' | 'bug' | 'other', app_id?, name?, email, message, created_at, status`)
-- `admins` (`user_id`, `email`), used by RLS policies. Starts with one row (you). **Adding an admin later** means creating their user in the Supabase dashboard and adding a row here, with no code change. Public sign-ups are disabled, so nobody else can create an account.
-
-**Row-Level Security**
-- `apps`: public `select` where `status = 'published'`; admins have full access.
-- `requests`: public `insert` only (rate-limited, with a honeypot field against spam); admins can `select`/`update`.
-- Storage `app-media`: public read; admins write.
 
 ---
 
@@ -196,15 +132,26 @@ The theme is converted into CSS variables (`--app-bg`, `--app-card-bg`, `--app-a
 
 ---
 
-## 6. UI and design system
+## 6. Brand identity and design system
 
-- **Tokens:** defined in `styles/globals.css` as CSS variables for `:root` and `.dark` (see the palette in the README).
+> **Full brand guide: [`docs/BRAND.md`](BRAND.md).** It covers the brand essence, voice and tone, logo spec, full color palette with checked contrast, type scale, spacing, radius, shadows, icons, motion, core components, and the CSS tokens.
+
+**At a glance**
+- **Personality:** calm, clear, thoughtful, reliable, human. Never loud.
+- **Tagline:** *Software that just makes sense.*
+- **Colors:** Sungaru Teal `#1F6F68` (dark mode `#4FB3A9`), neutral greys, and Warm Sand `#C98B4B` used sparingly. About 80% neutrals, 15% teal, and ≤ 5% sand. Every text color pair passes WCAG AA.
+- **Type:** Plus Jakarta Sans (headings, 600–800), Inter (body, 400–600), JetBrains Mono (versions). Self-hosted, fluid `clamp()` scale.
+- **Logo v1:** rounded geometric "S" mark in a squircle + "**Sungaru** Dev" wordmark.
+- **Shape and space:** 4px spacing grid, 16px card radius, soft shadows in light mode and borders in dark mode.
+- **Brand vs. app themes:** the header, footer, and admin area always use the Sungaru brand. App pages use their own colors but keep the brand fonts, spacing, and components.
+
+**Implementation**
+- **Tokens:** CSS variables for `:root` and `.dark` in `styles/globals.css` (copied from BRAND §10), and linked to Tailwind with `@theme`.
 - **Theme toggle:** Light / Dark / System. The choice is saved in `localStorage`, and an inline script in `index.html` applies it before the page renders, so there is no flash of the wrong theme.
-- **Typography:** Plus Jakarta Sans (headings), Inter (body), fluid `clamp()` scale, 65–75 character line length for long text.
-- **Layout:** 12-column container with a max width of about 1200px and 16px side margins on mobile; responsive card grid (1 → 2 → 3 columns).
-- **App cards:** icon, name, tagline, platform badges; a small lift and border-color change on hover; the whole card is one link; the card is tinted with the app's accent color.
-- **Motion:** subtle fade and slide between pages, which is turned off for users who set `prefers-reduced-motion`.
-- **Accessibility:** semantic landmarks, visible focus rings, keyboard-operable gallery and lightbox, alt text required for screenshots, AA contrast on site colors.
+- **Layout:** max-width 1200px container, 16px side margins on mobile, and a responsive card grid (1 → 2 → 3 columns).
+- **App cards:** icon, name, tagline, platform badges; a small lift and an accent-colored border on hover; the whole card is one link.
+- **Motion:** 120 / 200 / 320ms transitions, turned off for users who set `prefers-reduced-motion`.
+- **Accessibility:** semantic landmarks, visible focus rings, keyboard-operable gallery and lightbox, alt text required for screenshots, AA contrast enforced in the builder.
 
 ---
 
@@ -212,7 +159,7 @@ The theme is converted into CSS variables (`--app-bg`, `--app-card-bg`, `--app-a
 
 ### Phase 0: Foundations
 - [ ] Scaffold Vite + React + TS; ESLint, Prettier, Vitest, path aliases
-- [ ] Tailwind v4 + design tokens + fonts
+- [ ] Tailwind v4 + design tokens from BRAND §10 + self-hosted fonts
 - [ ] shadcn/ui base components (Button, Card, Dialog, Tabs, Accordion, Input, Textarea, Switch, Select)
 - [ ] ThemeProvider + ThemeToggle (no flash of the wrong theme)
 - [ ] Router skeleton with layouts, lazy routes, 404, scroll restoration
@@ -220,7 +167,7 @@ The theme is converted into CSS variables (`--app-bg`, `--app-card-bg`, `--app-a
 - [ ] CI (GitHub Actions): lint, typecheck, test, build
 
 ### Phase 1: Public site with mock data
-- [ ] Zod `App` schema + seed data (2–3 sample apps)
+- [ ] Zod schema (`src/lib/schema/app.ts`, SCHEMA §6) + seed data (2–3 sample apps, SCHEMA §7)
 - [ ] `lib/api/apps.ts` interface + mock adapter
 - [ ] Home page
 - [ ] Catalogue page with AppCard grid, search, and platform filter
@@ -231,7 +178,7 @@ The theme is converted into CSS variables (`--app-bg`, `--app-card-bg`, `--app-a
 - [ ] SEO/meta tags for each route
 
 ### Phase 2: Backend
-- [ ] Supabase project, SQL migrations, RLS policies, storage bucket
+- [ ] Supabase project + `supabase/migrations/0001_init.sql` from SCHEMA §2–§5 (tables, triggers, RLS, storage bucket); disable sign-ups; add yourself to `admins`
 - [ ] Supabase adapter implementing the same API interface
 - [ ] Request form writes to the DB (honeypot field + basic rate limit)
 - [ ] Create the site-wide **Google Form** (fields: App, Rating, Feedback, Email (optional)) linked to a Google Sheet, with email notifications on new responses; store its URL and the App field's pre-fill `entry.<id>` in `.env` (`VITE_FEEDBACK_FORM_URL`, `VITE_FEEDBACK_APP_FIELD`)

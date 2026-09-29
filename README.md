@@ -91,7 +91,8 @@ sungaru_dev/
 ├─ docs/
 │  ├─ PLAN.md                 # Build plan & roadmap
 │  ├─ BRAND.md                # Brand identity & design system
-│  └─ SCHEMA.md               # Database, security policies, Zod schema, example data
+│  ├─ SCHEMA.md               # Database, security policies, Zod schema, example data
+│  └─ GEMINI_PROMPTS.md       # Step-by-step build prompts for Gemini
 ├─ public/                    # Favicons, OG images, robots.txt
 ├─ src/
 │  ├─ app/
@@ -173,6 +174,7 @@ You can build and try out the whole site with `VITE_DATA_SOURCE=mock` before a S
 - [`docs/PLAN.md`](docs/PLAN.md): phase-by-phase plan, route map, and acceptance criteria
 - [`docs/BRAND.md`](docs/BRAND.md): brand identity and design system
 - [`docs/SCHEMA.md`](docs/SCHEMA.md): database schema, security, and validation
+- [`docs/GEMINI_PROMPTS.md`](docs/GEMINI_PROMPTS.md): step-by-step prompts for building the site with Gemini (project rules for the AI are in [`GEMINI.md`](GEMINI.md))
 
 ## License
 

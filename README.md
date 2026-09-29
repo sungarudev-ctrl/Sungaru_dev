@@ -47,7 +47,9 @@ This repository contains the **Sungaru Dev website**: a single-page application 
 | `muted` | `#5B6168` | `#9AA1A8` | Secondary text |
 | `border` | `#E4E6E8` | `#262B30` | Dividers, card borders |
 
-The palette is calm and modern: a deep, slightly desaturated teal with neutral greys and a warm accent used sparingly. All text/background pairs meet WCAG AA contrast.
+The palette is calm and modern: a deep, slightly desaturated teal with neutral greys and a warm accent used sparingly. Every color pair used for text meets WCAG AA contrast. Light-mode Warm Sand is for decoration only; sand-colored text uses `#9A6330`.
+
+The full brand guide (voice, logo, full palette, type scale, spacing, components) is in [`docs/BRAND.md`](docs/BRAND.md).
 
 **Typography**
 - Headings: **Plus Jakarta Sans** (600–800)
@@ -87,7 +89,9 @@ The whole stack runs on free tiers ($0/month); the only cost is the custom domai
 ```
 sungaru_dev/
 ├─ docs/
-│  └─ PLAN.md                 # Build plan & roadmap
+│  ├─ PLAN.md                 # Build plan & roadmap
+│  ├─ BRAND.md                # Brand identity & design system
+│  └─ SCHEMA.md               # Database, security policies, Zod schema, example data
 ├─ public/                    # Favicons, OG images, robots.txt
 ├─ src/
 │  ├─ app/
@@ -166,7 +170,9 @@ You can build and try out the whole site with `VITE_DATA_SOURCE=mock` before a S
 
 ## Roadmap
 
-See [`docs/PLAN.md`](docs/PLAN.md) for the phase-by-phase plan, the data model, the route map, and acceptance criteria.
+- [`docs/PLAN.md`](docs/PLAN.md): phase-by-phase plan, route map, and acceptance criteria
+- [`docs/BRAND.md`](docs/BRAND.md): brand identity and design system
+- [`docs/SCHEMA.md`](docs/SCHEMA.md): database schema, security, and validation
 
 ## License
 

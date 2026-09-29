@@ -1,0 +1,269 @@
+# Sungaru Dev Website: Build Plan
+
+## 1. Goals
+
+1. Showcase every Sungaru Dev app on a clean, modern catalogue page.
+2. Give each app a rich, **individually themed** detail page.
+3. Let the owner add new apps **through a form** (Create App → Add App), with no code changes.
+4. Provide support channels: per-app FAQs, Help, and Feedback, plus site-wide support and user requests.
+5. Build it as a fast, accessible **single-page application** with solid routing and a dark/light mode switcher.
+
+### Non-goals for v1
+- User accounts for the public (visitors don't sign in).
+- Payments or licensing.
+- Multi-language support (the code will keep text separate so this can be added later).
+
+---
+
+## 2. Key decisions
+
+| Decision | Choice | Notes |
+|---|---|---|
+| SPA framework | React 19 + TypeScript + Vite | |
+| Router | React Router data router (`createBrowserRouter`) | Loaders prefetch app data, `lazy()` splits routes, `<ScrollRestoration/>`, `errorElement` per route |
+| Styling | Tailwind v4 + CSS custom properties | Site tokens on `:root`/`.dark`, per-app tokens scoped to the app page wrapper |
+| Persistence | Supabase: `apps` table (JSONB columns for flexible content), Storage bucket for images, Auth for the admin | A local JSON "mock" adapter behind the same interface allows offline development |
+| Validation | One Zod schema used by the form, the API layer, and the TypeScript types | |
+| Admin access | Supabase email/magic-link auth + Row-Level Security; only admin emails can write | Public users can only read published apps |
+| Images | Uploaded to Storage and served as WebP at several sizes (`srcset`) | Size limits enforced in the uploader |
+| Hosting | Vercel/Netlify with SPA fallback rewrite (`/* → /index.html`) | |
+
+> **Why Supabase rather than a static JSON file?** The "Add App" button has to save data somewhere that the live site reads from. A static site would need a rebuild for every new app. Supabase lets a new app appear immediately after you click Add App, and it also handles image uploads and sign-in.
+> **Alternative:** Firebase (Firestore + Storage + Auth) fits the same design. Only `lib/api/` would change.
+
+---
+
+## 3. Route map
+
+| Path | Page | Notes |
+|---|---|---|
+| `/` | Home | Hero, featured apps, value props, CTA to catalogue |
+| `/apps` | App catalogue | Grid of app cards, search + platform filter (Android / iOS / Desktop / Web) |
+| `/apps/:slug` | App detail | Themed with that app's colors |
+| `/apps/:slug/faq` | App FAQs | Accordion, searchable |
+| `/apps/:slug/help` | App help | Rich text / guides, contact info |
+| `/apps/:slug/feedback` | App feedback | Form (or redirect to external feedback URL if set) |
+| `/support` | General support | Contact form, links to each app's help |
+| `/request` | User requests | Feature request / new app idea form |
+| `/about` | About Sungaru Dev | Mission, contact |
+| `/admin/login` | Admin sign-in | |
+| `/admin` | Dashboard | List of apps (draft/published), **Create App** button, inbox of feedback/requests |
+| `/admin/apps/new` | App builder | Form + live preview, **Add App** button |
+| `/admin/apps/:slug/edit` | Edit app | Same builder, pre-filled |
+| `*` | 404 | Friendly not-found page |
+
+**Routing details**
+- `RootLayout` (header with nav + theme toggle, footer) wraps all public routes; `AdminLayout` wraps `/admin/*` behind an auth guard.
+- `AppLayout` wraps `/apps/:slug/*`: it loads the app once, applies its theme, and shows sub-tabs (Overview · FAQ · Help · Feedback) as nested routes.
+- Route loaders + TanStack Query prefetch on link hover, so pages open instantly.
+- Unknown slugs show a themed "App not found" `errorElement`.
+- `<title>`/meta tags update for each route (react-helmet-async) so shared links have proper previews.
+
+---
+
+## 4. Data model
+
+### 4.1 `App` (Zod schema = TypeScript type = DB row)
+
+```ts
+App {
+  id: uuid
+  slug: string                       // auto-generated from name, editable, unique
+  status: 'draft' | 'published'
+  order: number                      // position in catalogue
+  name: string
+  tagline: string                    // ≤ 80 chars, shown on the card
+  description: string                // markdown, "what it's about"
+  icon: ImageRef
+  screenshots: ImageRef[]            // curated, reorderable, with captions
+  features: Feature[]
+  platforms: {
+    playStore?: url
+    appStore?:  url
+    desktop?:   { windows?: url; macos?: url; linux?: url }
+    web?:       url
+  }
+  support: {
+    feedbackUrl?: url                // external form; otherwise use built-in feedback form
+    faqs: { question: string; answer: string }[]
+    help: string                     // markdown
+    contactEmail?: email
+  }
+  theme: AppTheme
+  version?: string
+  updatedAt: timestamp
+  createdAt: timestamp
+}
+
+Feature {
+  id: string
+  title: string
+  description: string
+  icon?: string                      // Lucide icon name or uploaded image
+  image?: ImageRef
+  cardStyle?: Partial<CardStyle>     // per-feature override
+}
+
+ImageRef { url: string; alt: string; width: number; height: number }
+```
+
+### 4.2 `AppTheme` (the customization options)
+
+```ts
+AppTheme {
+  light: ThemeVariant
+  dark:  ThemeVariant
+  hero:  { layout: 'centered' | 'split' | 'banner'; showScreenshot: boolean }
+  card:  CardStyle
+}
+
+ThemeVariant {
+  pageBackground: Background
+  cardBackground: Background
+  accent: color                      // buttons, links, highlights on this page
+  text: color
+  mutedText: color
+}
+
+Background =
+  | { type: 'solid';    color: color }
+  | { type: 'gradient'; from: color; to: color; angle: number }
+  | { type: 'image';    image: ImageRef; overlay: color; overlayOpacity: number }
+
+CardStyle {
+  radius: 'sm' | 'md' | 'lg' | 'xl'
+  border: 'none' | 'subtle' | 'accent'
+  shadow: 'none' | 'soft' | 'lifted'
+  glass: boolean                     // translucent + backdrop-blur
+}
+```
+
+The theme is converted into CSS variables (`--app-bg`, `--app-card-bg`, `--app-accent`, …) on the app page wrapper, so the components themselves need no per-app code. If you only set light-mode colors, dark-mode values are generated automatically; you can override them.
+
+### 4.3 Other tables
+- `feedback` (`id, app_id, name?, email?, rating?, message, created_at, status`)
+- `requests` (`id, type: 'feature' | 'new-app' | 'bug' | 'other', app_id?, name?, email, message, created_at, status`)
+- `admins` (`email`), used by RLS policies
+
+**Row-Level Security**
+- `apps`: public `select` where `status = 'published'`; admins have full access.
+- `feedback`, `requests`: public `insert` only (rate-limited, with a honeypot field against spam); admins can `select`/`update`.
+- Storage `app-media`: public read; admins write.
+
+---
+
+## 5. App builder (Create App → Add App)
+
+**Flow:** Dashboard → **Create App** → builder opens with an empty form and a side-by-side live preview → fill in the sections → **Add App** validates the form and saves it → redirects to `/apps/:slug`.
+
+**Form sections** (a stepper on mobile, collapsible panels on desktop):
+
+1. **Basics**: name, slug (auto-filled), tagline, description (markdown editor), version, status.
+2. **Media**: icon upload; drag-and-drop screenshot upload with reordering, captions, and alt text (required, for accessibility).
+3. **Key features**: add/remove/reorder features; each has a title, description, icon picker, optional image, and optional card color override.
+4. **Downloads**: toggle each platform on or off and enter its URL. Only enabled platforms appear on the page.
+5. **Support**: feedback URL (or use the built-in form), FAQ list editor, help content, contact email.
+6. **Theme**:
+   - Light/dark tabs
+   - Page background: solid / gradient (two color pickers + angle) / image (upload + overlay)
+   - Card background: same options
+   - Accent, text, and muted text colors
+   - Card style: radius, border, shadow, glass
+   - Hero layout
+   - Theme presets (e.g. "Midnight", "Paper", "Ocean") as starting points
+   - **Contrast checker**: shows AA/AAA badges and a warning when colors are hard to read
+
+**Behavior**
+- Unsaved work is autosaved to local storage, and you are warned before leaving the page.
+- **Save Draft** skips the "required for publish" checks; **Add App** enforces them all.
+- Validation errors link to the field they refer to.
+- Editing an existing app reuses the same builder, and its main button reads **Save Changes**.
+
+---
+
+## 6. UI and design system
+
+- **Tokens:** defined in `styles/globals.css` as CSS variables for `:root` and `.dark` (see the palette in the README).
+- **Theme toggle:** Light / Dark / System. The choice is saved in `localStorage`, and an inline script in `index.html` applies it before the page renders, so there is no flash of the wrong theme.
+- **Typography:** Plus Jakarta Sans (headings), Inter (body), fluid `clamp()` scale, 65–75 character line length for long text.
+- **Layout:** 12-column container with a max width of about 1200px and 16px side margins on mobile; responsive card grid (1 → 2 → 3 columns).
+- **App cards:** icon, name, tagline, platform badges; a small lift and border-color change on hover; the whole card is one link; the card is tinted with the app's accent color.
+- **Motion:** subtle fade and slide between pages, which is turned off for users who set `prefers-reduced-motion`.
+- **Accessibility:** semantic landmarks, visible focus rings, keyboard-operable gallery and lightbox, alt text required for screenshots, AA contrast on site colors.
+
+---
+
+## 7. Phases and tasks
+
+### Phase 0: Foundations
+- [ ] Scaffold Vite + React + TS; ESLint, Prettier, Vitest, path aliases
+- [ ] Tailwind v4 + design tokens + fonts
+- [ ] shadcn/ui base components (Button, Card, Dialog, Tabs, Accordion, Input, Textarea, Switch, Select)
+- [ ] ThemeProvider + ThemeToggle (no flash of the wrong theme)
+- [ ] Router skeleton with layouts, lazy routes, 404, scroll restoration
+- [ ] CI (GitHub Actions): lint, typecheck, test, build
+
+### Phase 1: Public site with mock data
+- [ ] Zod `App` schema + seed data (2–3 sample apps)
+- [ ] `lib/api/apps.ts` interface + mock adapter
+- [ ] Home page
+- [ ] Catalogue page with AppCard grid, search, and platform filter
+- [ ] App detail page: Hero, Gallery + lightbox, Description, FeatureCards, DownloadLinks (shown only if set), Support links
+- [ ] Per-app theming via CSS variables (light and dark)
+- [ ] FAQ, Help, and Feedback sub-routes
+- [ ] Support, Request, and About pages
+- [ ] SEO/meta tags for each route
+
+### Phase 2: Backend
+- [ ] Supabase project, SQL migrations, RLS policies, storage bucket
+- [ ] Supabase adapter implementing the same API interface
+- [ ] Feedback and request forms write to the DB (honeypot field + basic rate limit)
+- [ ] Admin auth (magic link) + route guard
+
+### Phase 3: App builder
+- [ ] Admin dashboard: app list, status, reordering, **Create App** button
+- [ ] Builder form sections 1–6 (React Hook Form + Zod)
+- [ ] Image uploader (drag-and-drop, resizing/WebP conversion, reordering, alt text)
+- [ ] Theme editor + presets + contrast checker
+- [ ] Live preview using the real app page components
+- [ ] **Add App** (publish), **Save Draft**, edit, unpublish, delete (with confirmation)
+- [ ] Draft autosave + warning before leaving with unsaved changes
+- [ ] Admin inbox for feedback and requests
+
+### Phase 4: Polish and launch
+- [ ] Page transitions + reduced-motion support
+- [ ] Lighthouse ≥ 95 on Performance, Accessibility, Best Practices, and SEO
+- [ ] Playwright e2e: browse → open app → download link; admin create → add → app appears in catalogue
+- [ ] Favicon, OG images, `robots.txt`, sitemap generation
+- [ ] Deploy to Vercel/Netlify, custom domain, analytics (privacy-friendly, e.g. Plausible)
+
+### Later (v2 ideas)
+- Changelog / release notes per app
+- Newsletter or "notify me" for upcoming apps
+- Public roadmap and voting on requests
+- Multi-language support
+- Pre-rendering app pages for better SEO
+
+---
+
+## 8. Acceptance criteria
+
+- Clicking any app card opens `/apps/:slug`, and the browser back button returns to the same scroll position.
+- A download button appears **only** for platforms with a URL.
+- Each app page uses its own background and card colors in both light and dark mode.
+- The theme toggle works everywhere, is remembered after a reload, and the wrong theme never flashes on load.
+- An admin can create an app through the form, click **Add App**, and see it in the catalogue and at its own URL without redeploying the site.
+- Non-admins cannot reach `/admin/*` or write to `apps`.
+- All pages work at 360px width with no horizontal scrolling.
+- Lighthouse Accessibility ≥ 95.
+
+---
+
+## 9. Open questions for the owner
+
+1. **Hosting / domain**: do you already have a domain (e.g. `sungaru.dev`)?
+2. **Backend**: is Supabase OK, or do you prefer Firebase or another provider?
+3. **Admin users**: just you, or multiple team members?
+4. **Feedback**: should it be stored on the site (built-in form), sent to an external form such as Google Forms or Tally, or should each app choose?
+5. **Logo**: do you have a logo/wordmark, or should we design a simple one?
+6. **Launch apps**: which apps (and their details and screenshots) go live first?
